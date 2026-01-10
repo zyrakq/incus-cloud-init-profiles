@@ -1,0 +1,252 @@
+#cloud-config
+users:
+  - name: archuser
+    gecos: Arch User
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    primary_group: archuser
+    groups: [wheel, users, archuser]
+    homedir: /home/archuser
+    groups: wheel
+    shell: /bin/zsh
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGeXav7wv8PpEtMWBsR7rptvyQsbewLwHstRKVZwT+LC archuser@devcontainer
+timezone: Europe/Moscow
+hostname: devcontainer
+
+write_files:
+# pacman mirror
+  - path: /etc/pacman.d/mirrorlist
+    content: |
+      Server = https://at.arch.mirror.kescher.at/$repo/os/$arch
+      Server = https://mirror.theo546.fr/archlinux/$repo/os/$arch
+      Server = https://archlinux.thaller.ws/$repo/os/$arch
+      Server = https://mirror.moson.org/arch/$repo/os/$arch
+      Server = https://arch.phinau.de/$repo/os/$arch
+      Server = https://md.mirrors.hacktegic.com/archlinux/$repo/os/$arch
+      Server = https://london.mirror.pkgbuild.com/$repo/os/$arch
+      Server = https://mirrors.neusoft.edu.cn/archlinux/$repo/os/$arch
+      Server = https://mirror.ufscar.br/archlinux/$repo/os/$arch
+      Server = https://mirror.theash.xyz/arch/$repo/os/$arch
+      Server = https://america.mirror.pkgbuild.com/$repo/os/$arch
+
+# ssh-agent
+  - path: /tmp/shared.ssh-agent.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=SSH key agent
+
+      [Service]
+      Type=simple
+      Environment=SSH_AUTH_SOCK=%t/ssh-agent.socket
+      ExecStart=/usr/bin/ssh-agent -D -a $SSH_AUTH_SOCK
+
+      [Install]
+      WantedBy=default.target
+
+# profile
+  - path: /tmp/shared.profile
+    permissions: '0644'
+    content: |
+      export EDITOR="/usr/bin/nano"
+      export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/ssh-agent.socket"
+
+# zshell
+  - path: /tmp/shared.zshrc
+    permissions: '0644'
+    content: |
+      export ZSH="$HOME/.oh-my-zsh"
+      ZSH_THEME="agnoster"
+      ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=white,bold'
+      source $ZSH/oh-my-zsh.sh
+      plugins=(
+        git
+        docker
+        composer
+        sudo
+        npm
+        zsh-autosuggestions
+        zsh-syntax-highlighting
+        dotnet
+        pipenv
+      )
+      [[ -f ~/.profile ]] && . ~/.profile
+      autoload -Uz compinit && compinit
+
+  - path: /tmp/shared.zprofile
+    permissions: '0644'
+    content: |
+      [[ -f ~/.zshrc ]] && . ~/.zshrc
+
+# ssh-agent install
+  - path: /tmp/install-ssh-agent.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Generic post-install script for openssh package (fallback)
+      echo "Configuring SSH agent (generic)..."
+
+      if command -v systemctl >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
+          # systemd available - trying to configure ssh-agent service
+          echo "systemd detected, trying to configure ssh-agent service..."
+          
+          # Try standard service first
+          if systemctl --user list-unit-files | grep -q "ssh-agent.service"; then
+              systemctl --user enable ssh-agent.service
+              systemctl --user start ssh-agent.service
+              echo "SSH agent configured using ssh-agent.service"
+          else
+              # Try with username
+              USERNAME=$(whoami)
+              if systemctl --user list-unit-files | grep -q "ssh-agent@"; then
+                  systemctl --user enable ssh-agent@$USERNAME.service
+                  systemctl --user start ssh-agent@$USERNAME.service
+                  echo "SSH agent configured using ssh-agent@$USERNAME.service"
+              else
+                  echo "No suitable ssh-agent service found, skipping configuration"
+              fi
+          fi
+      else
+          echo "systemd not available, skipping ssh-agent configuration"
+      fi
+# zshell install
+  - path: /tmp/install-ohmyzsh.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # oh-my-zsh installation script
+      # Installs oh-my-zsh via official installation script
+
+      set -euo pipefail
+
+      if [ -z "${HOME:-}" ]; then
+        if [ "$(id -u)" = "0" ]; then
+          export HOME=/root
+        else
+          export HOME=$(getent passwd "$(id -un)" | cut -d: -f6)
+        fi
+      fi
+
+      echo "HOME fixed: $HOME (USER=$USER, UID=$(id -u))"
+
+      echo "Installing oh-my-zsh..."
+
+      # Check if oh-my-zsh is already installed
+      if [ -d $HOME/.oh-my-zsh ]; then
+          echo "oh-my-zsh is already installed at ~/.oh-my-zsh"
+          echo "Skipping installation"
+          exit 0
+      fi
+
+      # Check if zsh is installed
+      if ! command -v zsh &> /dev/null; then
+          echo "Error: zsh is not installed. Please install zsh first."
+          exit 1
+      fi
+
+      # Check if curl is available
+      if ! command -v curl &> /dev/null; then
+          echo "Error: curl is not installed. Please install curl first."
+          exit 1
+      fi
+
+      echo "Downloading and installing oh-my-zsh..."
+
+      # Install oh-my-zsh with unattended installation
+      RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+      echo "oh-my-zsh installation completed"
+      echo "Note: Shell was not changed automatically. Run 'chsh -s \$(which zsh)' to set zsh as default shell"
+
+      echo "Installing zsh-autosuggestions..."
+
+      # Check if oh-my-zsh is installed
+      if [ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}" ]; then
+          echo "Error: oh-my-zsh not found. Please install oh-my-zsh first."
+          echo "Expected directory: ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+          exit 1
+      fi
+
+      # Define plugin directory
+      PLUGIN_DIR="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
+
+      # Check if already installed
+      if [ -d "$PLUGIN_DIR" ]; then
+          echo "zsh-autosuggestions already installed at: $PLUGIN_DIR"
+          echo "Updating existing installation..."
+          cd "$PLUGIN_DIR"
+          git pull origin master
+      else
+          echo "Cloning zsh-autosuggestions to: $PLUGIN_DIR"
+          git clone https://github.com/zsh-users/zsh-autosuggestions "$PLUGIN_DIR"
+      fi
+
+      echo "zsh-autosuggestions installation completed"
+      echo "Don't forget to add 'zsh-autosuggestions' to your plugins in ~/.zshrc"
+
+      echo "Installing zsh-syntax-highlighting..."
+
+      # Check if oh-my-zsh is installed
+      if [ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}" ]; then
+          echo "Error: oh-my-zsh not found. Please install oh-my-zsh first."
+          echo "Expected directory: ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+          exit 1
+      fi
+
+      # Define plugin directory
+      PLUGIN_DIR="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting"
+
+      # Check if already installed
+      if [ -d "$PLUGIN_DIR" ]; then
+          echo "zsh-syntax-highlighting already installed at: $PLUGIN_DIR"
+          echo "Updating existing installation..."
+          cd "$PLUGIN_DIR"
+          git pull origin master
+      else
+          echo "Cloning zsh-syntax-highlighting to: $PLUGIN_DIR"
+          git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$PLUGIN_DIR"
+      fi
+
+      echo "zsh-syntax-highlighting installation completed"
+      echo "Don't forget to add 'zsh-syntax-highlighting' to your plugins in ~/.zshrc"
+
+# welcome
+  - path: /etc/motd
+    content: |
+      Arch in Incus + Cloud-init + SSH ready!
+
+package_upgrade: true
+packages:
+  - base-devel
+  - git
+  - zsh
+  - powerline
+  - kitty-terminfo
+  - htop
+  - nano
+  - openssh
+runcmd:
+  - timedatectl set-ntp true
+  - pacman-key --init && pacman-key --populate archlinux
+  - systemctl enable --now sshd
+  - mkdir -p /home/archuser/.config/systemd/user && chown -R archuser:archuser /home/archuser/.config
+  - cp /tmp/shared.ssh-agent.service /home/archuser/.config/systemd/user/ssh-agent.service
+  - chown archuser:archuser /home/archuser/.config/systemd/user/ssh-agent.service
+  - runuser -l archuser -c 'bash /tmp/install-ssh-agent.sh'
+  - |
+    users=(root archuser)
+    for user in "${users[@]}"; do
+      if [ "$user" = "root" ]; then
+        bash /tmp/install-ohmyzsh.sh
+      else
+        runuser -l "$user" -c 'bash /tmp/install-ohmyzsh.sh' 
+      fi
+      chsh -s "$(which zsh)" "$user"
+    done
+  - cp /tmp/shared.profile /root/.profile && chown root:root /root/.profile
+  - cp /tmp/shared.profile /home/archuser/.profile && chown archuser:archuser /home/archuser/.profile
+  - cp /tmp/shared.zprofile /root/.zprofile && chown root:root /root/.zprofile
+  - cp /tmp/shared.zprofile /home/archuser/.zprofile && chown archuser:archuser /home/archuser/.zprofile
+  - cp /tmp/shared.zshrc /root/.zshrc && chown root:root /root/.zshrc
+  - cp /tmp/shared.zshrc /home/archuser/.zshrc && chown archuser:archuser /home/archuser/.zshrc
+  - rm /tmp/shared.* /tmp/install-*.sh

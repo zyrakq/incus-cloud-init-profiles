@@ -1,0 +1,23 @@
+description: Lan Incus Profile
+devices:
+  eth0:
+    hwaddr: 10:66:6A:AC:BA:F5
+    network: lan-macvlan
+    type: nic
+  root:
+    path: /
+    pool: zfspool
+    type: disk
+name: lan
+used_by: []
+project: default
+config:
+  cloud-init.vendor-data: |
+    #cloud-config
+    users:
+      - name: archuser
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        groups: wheel
+        shell: /bin/bash
+    timezone: Europe/Moscow
+    hostname: devcontainer
