@@ -29,21 +29,6 @@ write_files:
       Server = https://mirror.theash.xyz/arch/$repo/os/$arch
       Server = https://america.mirror.pkgbuild.com/$repo/os/$arch
 
-# ssh-agent
-  - path: /tmp/shared.ssh-agent.service
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=SSH key agent
-
-      [Service]
-      Type=simple
-      Environment=SSH_AUTH_SOCK=%t/ssh-agent.socket
-      ExecStart=/usr/bin/ssh-agent -D -a $SSH_AUTH_SOCK
-
-      [Install]
-      WantedBy=default.target
-
 # profile
   - path: /tmp/shared.profile
     permissions: '0644'
@@ -78,37 +63,6 @@ write_files:
     content: |
       [[ -f ~/.zshrc ]] && . ~/.zshrc
 
-# ssh-agent install
-  - path: /tmp/install-ssh-agent.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      # Generic post-install script for openssh package (fallback)
-      echo "Configuring SSH agent (generic)..."
-
-      if command -v systemctl >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
-          # systemd available - trying to configure ssh-agent service
-          echo "systemd detected, trying to configure ssh-agent service..."
-          
-          # Try standard service first
-          if systemctl --user list-unit-files | grep -q "ssh-agent.service"; then
-              systemctl --user enable ssh-agent.service
-              systemctl --user start ssh-agent.service
-              echo "SSH agent configured using ssh-agent.service"
-          else
-              # Try with username
-              USERNAME=$(whoami)
-              if systemctl --user list-unit-files | grep -q "ssh-agent@"; then
-                  systemctl --user enable ssh-agent@$USERNAME.service
-                  systemctl --user start ssh-agent@$USERNAME.service
-                  echo "SSH agent configured using ssh-agent@$USERNAME.service"
-              else
-                  echo "No suitable ssh-agent service found, skipping configuration"
-              fi
-          fi
-      else
-          echo "systemd not available, skipping ssh-agent configuration"
-      fi
 # zshell install
   - path: /tmp/install-ohmyzsh.sh
     permissions: '0755'
@@ -229,10 +183,6 @@ runcmd:
   - timedatectl set-ntp true
   - pacman-key --init && pacman-key --populate archlinux
   - systemctl enable --now sshd
-  - mkdir -p /home/archuser/.config/systemd/user && chown -R archuser:archuser /home/archuser/.config
-  - cp /tmp/shared.ssh-agent.service /home/archuser/.config/systemd/user/ssh-agent.service
-  - chown archuser:archuser /home/archuser/.config/systemd/user/ssh-agent.service
-  - runuser -l archuser -c 'bash /tmp/install-ssh-agent.sh'
   - |
     users=(root archuser)
     for user in "${users[@]}"; do
