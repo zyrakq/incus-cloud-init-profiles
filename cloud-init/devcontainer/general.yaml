@@ -182,6 +182,11 @@ packages:
 runcmd:
   - timedatectl set-ntp true
   - pacman-key --init && pacman-key --populate archlinux
+  - |
+    if ! grep -qi '^ *AllowAgentForwarding' /etc/ssh/sshd_config; then
+      echo 'AllowAgentForwarding yes' >> /etc/ssh/sshd_config
+    fi
+  - systemctl daemon-reload
   - systemctl enable --now sshd
   - |
     users=(root archuser)
