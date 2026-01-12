@@ -1,0 +1,30 @@
+#cloud-config
+users:
+  - name: archuser
+    gecos: Arch User
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    primary_group: archuser
+    groups: [wheel, users, archuser]
+    homedir: /home/archuser
+    groups: wheel
+    shell: /bin/zsh
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGeXav7wv8PpEtMWBsR7rptvyQsbewLwHstRKVZwT+LC archuser@devcontainer
+hostname: devcontainer
+timezone: Europe/Moscow
+
+write_files:
+# welcome
+  - path: /etc/motd
+    content: |
+      Arch in Incus + Cloud-init + SSH ready!
+
+package_upgrade: true
+packages:
+  - base-devel
+  - git
+  - kitty-terminfo
+  - htop
+  - nano
+runcmd:
+  - timedatectl set-ntp true

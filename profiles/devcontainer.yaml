@@ -1,7 +1,7 @@
 description: DevContainer Incus Profile
 devices:
   eth0:
-    hwaddr: 10:66:6A:AC:BA:F5
+    # hwaddr: 10:66:6A:AC:BA:F5
     network: lan-macvlan
     type: nic
   root:
@@ -15,4 +15,4 @@ config:
   security.nesting: "true"
   security.syscalls.intercept.mknod: "true"
   security.syscalls.intercept.setxattr: "true"
-  linux.kernel_modules: "overlay,br_netfilter,keyctl"
+  linux.kernel_modules: "overlay,br_netfilter" #keyctl

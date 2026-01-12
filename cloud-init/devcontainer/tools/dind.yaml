@@ -18,7 +18,7 @@ write_files:
       if [ -d /sys/kernel/security ] && ! mountpoint -q /sys/kernel/security; then
           mount -t securityfs none /sys/kernel/security || {
               echo >&2 'Could not mount /sys/kernel/security.'
-              echo >&2 'AppArmor detection and --privileged mode might break.'
+              echo >&2 'AppArmor detection and --privileged permissions might break.'
           }
       fi
 
@@ -65,8 +65,7 @@ write_files:
 
       # Start dockerd in background
       ( dockerd ${CUSTOMDNS} ${DEFAULT_ADDRESS_POOL} > /tmp/dockerd.log 2>&1 ) &
-    mode: '0644'
-    owner: root:root
+    permissions: '0644'
 
   - path: /usr/local/share/docker-init.sh
     content: |
@@ -106,8 +105,7 @@ write_files:
 
       # Exec user command
       exec "$@"
-    mode: '0755'
-    owner: root:root
+    permissions: '0755'
 
   - path: /usr/local/bin/install-docker.sh
     content: |
@@ -269,7 +267,6 @@ write_files:
       echo "=========================="
       echo "To start dind: exec /usr/local/share/docker-init.sh"
     permissions: '0755'
-    owner: root:root
 
 runcmd:
   - /usr/local/bin/install-docker.sh vscode latest true true true ""

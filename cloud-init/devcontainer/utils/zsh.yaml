@@ -1,41 +1,5 @@
 #cloud-config
-users:
-  - name: archuser
-    gecos: Arch User
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    primary_group: archuser
-    groups: [wheel, users, archuser]
-    homedir: /home/archuser
-    groups: wheel
-    shell: /bin/zsh
-    ssh_authorized_keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGeXav7wv8PpEtMWBsR7rptvyQsbewLwHstRKVZwT+LC archuser@devcontainer
-timezone: Europe/Moscow
-hostname: devcontainer
-
 write_files:
-# pacman mirror
-  - path: /etc/pacman.d/mirrorlist
-    content: |
-      Server = https://at.arch.mirror.kescher.at/$repo/os/$arch
-      Server = https://mirror.theo546.fr/archlinux/$repo/os/$arch
-      Server = https://archlinux.thaller.ws/$repo/os/$arch
-      Server = https://mirror.moson.org/arch/$repo/os/$arch
-      Server = https://arch.phinau.de/$repo/os/$arch
-      Server = https://md.mirrors.hacktegic.com/archlinux/$repo/os/$arch
-      Server = https://london.mirror.pkgbuild.com/$repo/os/$arch
-      Server = https://mirrors.neusoft.edu.cn/archlinux/$repo/os/$arch
-      Server = https://mirror.ufscar.br/archlinux/$repo/os/$arch
-      Server = https://mirror.theash.xyz/arch/$repo/os/$arch
-      Server = https://america.mirror.pkgbuild.com/$repo/os/$arch
-
-# profile
-  - path: /tmp/shared.profile
-    permissions: '0644'
-    content: |
-      export EDITOR="/usr/bin/nano"
-      export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/ssh-agent.socket"
-
 # zshell
   - path: /tmp/shared.zshrc
     permissions: '0644'
@@ -164,30 +128,11 @@ write_files:
       echo "zsh-syntax-highlighting installation completed"
       echo "Don't forget to add 'zsh-syntax-highlighting' to your plugins in ~/.zshrc"
 
-# welcome
-  - path: /etc/motd
-    content: |
-      Arch in Incus + Cloud-init + SSH ready!
-
 package_upgrade: true
 packages:
-  - base-devel
-  - git
   - zsh
   - powerline
-  - kitty-terminfo
-  - htop
-  - nano
-  - openssh
 runcmd:
-  - timedatectl set-ntp true
-  - pacman-key --init && pacman-key --populate archlinux
-  - |
-    if ! grep -qi '^ *AllowAgentForwarding' /etc/ssh/sshd_config; then
-      echo 'AllowAgentForwarding yes' >> /etc/ssh/sshd_config
-    fi
-  - systemctl daemon-reload
-  - systemctl enable --now sshd
   - |
     users=(root archuser)
     for user in "${users[@]}"; do
@@ -198,10 +143,8 @@ runcmd:
       fi
       chsh -s "$(which zsh)" "$user"
     done
-  - cp /tmp/shared.profile /root/.profile && chown root:root /root/.profile
-  - cp /tmp/shared.profile /home/archuser/.profile && chown archuser:archuser /home/archuser/.profile
   - cp /tmp/shared.zprofile /root/.zprofile && chown root:root /root/.zprofile
   - cp /tmp/shared.zprofile /home/archuser/.zprofile && chown archuser:archuser /home/archuser/.zprofile
   - cp /tmp/shared.zshrc /root/.zshrc && chown root:root /root/.zshrc
   - cp /tmp/shared.zshrc /home/archuser/.zshrc && chown archuser:archuser /home/archuser/.zshrc
-  - rm /tmp/shared.* /tmp/install-*.sh
+  - rm /tmp/shared.z* /tmp/install-ohmyzsh.sh
