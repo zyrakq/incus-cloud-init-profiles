@@ -1,10 +1,9 @@
 # README
 
 ```sh
-yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' \
-    tools/docker.yaml \
-    lang/rust.yaml \
-    lang/bun.yaml
+yq eval-all 'select(fileIndex == 0) *+ select(fileIndex == 1)' \
+    tools/dind.yaml \
+    lang/rust.yaml
 ```
 
 ## Profile
@@ -18,7 +17,7 @@ incus profile set default cloud-init.network-config="$(cat network/lan-macvlan.y
 ```
 
 ```sh
-USERDATA=$(yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' tools/docker.yaml lang/rust.yaml lang/bun.yaml)
+USERDATA=$(yq eval-all 'select(fileIndex == 0) *+ select(fileIndex == 1)' tools/dind.yaml lang/rust.yaml)
 ```
 
 ```sh
@@ -38,7 +37,7 @@ incus launch images:archlinux/cloud devcontainer \
 ```
 
 ```sh
-USERDATA=$(yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' tools/docker.yaml lang/rust.yaml lang/bun.yaml)
+USERDATA=$(yq eval-all 'select(fileIndex == 0) *+ select(fileIndex == 1)' tools/dind.yaml lang/rust.yaml)
 ```
 
 ```sh

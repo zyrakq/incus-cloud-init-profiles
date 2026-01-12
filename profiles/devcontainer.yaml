@@ -11,3 +11,8 @@ devices:
 name: default
 used_by: []
 project: devcontainer
+config:
+  security.nesting: "true"
+  security.syscalls.intercept.mknod: "true"
+  security.syscalls.intercept.setxattr: "true"
+  linux.kernel_modules: "overlay,br_netfilter,keyctl"

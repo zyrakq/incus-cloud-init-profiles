@@ -120,6 +120,5 @@ write_files:
     owner: root:root
 
 runcmd:
-  - pacman -Syyu --noconfirm
   - pacman -S --noconfirm --needed base-devel rustup
   - /usr/local/bin/install-rust.sh archuser stable "" "" true true
