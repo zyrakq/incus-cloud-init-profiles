@@ -1,272 +1,45 @@
 #cloud-config
-# Minimal Docker-in-Docker (dind) installation for Incus cloud-init on Arch Linux.
-
 write_files:
-  - path: /usr/local/share/docker-run.template
-    content: |
-      #!/bin/sh
-      # Fixed dind preparation + dockerd start (hardcoded flags from sed).
-      set -e
-
-      # Clean PID files
-      find /run /var/run -iname 'docker*.pid' -delete 2>/dev/null || :
-      find /run /var/run -iname 'container*.pid' -delete 2>/dev/null || :
-
-      export container=docker
-
-      # Mount securityfs
-      if [ -d /sys/kernel/security ] && ! mountpoint -q /sys/kernel/security; then
-          mount -t securityfs none /sys/kernel/security || {
-              echo >&2 'Could not mount /sys/kernel/security.'
-              echo >&2 'AppArmor detection and --privileged permissions might break.'
-          }
-      fi
-
-      # Mount /tmp
-      if ! mountpoint -q /tmp; then
-          mount -t tmpfs none /tmp
-      fi
-
-      # Cgroup v2 nesting
-      set_cgroup_nesting() {
-          if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
-              mkdir -p /sys/fs/cgroup/init
-              xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs 2>/dev/null || :
-              sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers \
-                  > /sys/fs/cgroup/cgroup.subtree_control
-          fi
-      }
-
-      retry_cgroup_nesting=0
-      until [ "${retry_cgroup_nesting}" -eq "5" ]; do
-          set +e
-              set_cgroup_nesting
-              [ $? -ne 0 ] && echo "(*) cgroup v2: Failed to enable nesting, retrying..." || break
-          set -e
-          retry_cgroup_nesting=$((retry_cgroup_nesting + 1))
-      done
-
-      # DNS (runtime detection + hardcoded ENABLED flag)
-      set +e
-          if grep -i 'internal.cloudapp.net' /etc/resolv.conf >/dev/null 2>&1 && [ "%%AZURE_ENABLED%%" = "true" ]; then
-              echo "Setting dockerd Azure DNS."
-              CUSTOMDNS="--dns 168.63.129.16"
-          else
-              echo "Not setting dockerd DNS manually."
-              CUSTOMDNS=""
-          fi
-      set -e
-
-      # Pool flag (hardcoded value)
-      DEFAULT_ADDRESS_POOL=""
-      if [ -n "%%POOL_VALUE%%" ]; then
-          DEFAULT_ADDRESS_POOL="--default-address-pool %%POOL_VALUE%%"
-      fi
-
-      # Start dockerd in background
-      ( dockerd ${CUSTOMDNS} ${DEFAULT_ADDRESS_POOL} > /tmp/dockerd.log 2>&1 ) &
-    permissions: '0644'
-
-  - path: /usr/local/share/docker-init.sh
-    content: |
-      #!/bin/sh
-      # Docker-in-Docker init wrapper (retries + exec; calls docker-run.sh).
-      set -e
-
-      sudo_if() {
-          if [ "$(id -u)" -ne 0 ]; then
-              sudo "$@"
-          else
-              "$@"
-          fi
-      }
-
-      retry_docker_start_count=0
-      docker_ok="false"
-      until [ "${docker_ok}" = "true" ] || [ "${retry_docker_start_count}" -eq "5" ]; do
-          /usr/local/share/docker-run.sh
-          retry_count=0
-          until [ "${docker_ok}" = "true" ] || [ "${retry_count}" -eq "5" ]; do
-              sleep 1
-              set +e
-                  docker info > /dev/null 2>&1 && docker_ok="true"
-              set -e
-              retry_count=$((retry_count + 1))
-          done
-          if [ "${docker_ok}" != "true" ] && [ "${retry_docker_start_count}" != "4" ]; then
-              echo "(*) Failed to start docker, retrying..."
-              set +e
-                  sudo_if pkill -f dockerd || true
-                  sudo_if pkill -f containerd || true
-              set -e
-          fi
-          retry_docker_start_count=$((retry_docker_start_count + 1))
-      done
-
-      # Exec user command
-      exec "$@"
+  - path: /usr/local/bin/docker-install-loader.sh
     permissions: '0755'
-
-  - path: /usr/local/bin/install-docker.sh
     content: |
       #!/usr/bin/env bash
-      set -euo pipefail
-
-      USERNAME="$1"
-      DOCKER_DASH_COMPOSE_VERSION="${2:-latest}"
-      INSTALL_DOCKER_BUILDX="${3:-true}"
-      INSTALL_DOCKER_COMPOSE_SWITCH="${4:-true}"
-      AZURE_DNS_AUTO_DETECTION="${5:-true}"
-      DOCKER_DEFAULT_ADDRESS_POOL="${6:-}"
-
-      USER_HOME=$(getent passwd "$USERNAME" | cut -d: -f6)
-      if [[ -z "$USER_HOME" ]]; then
-        echo "Error: User $USERNAME not found." >&2
-        exit 1
+      set -e
+      # Usage: $0 [main|v1.25.1|...]
+      # Downloads and runs Docker-in-Docker install.sh from specified ref (default: main)
+      
+      REF="${1:-main}"
+      if [ "${REF}" != "main" ]; then
+          REF="refs/tags/${REF}"
       fi
-
-      # Function to run commands as non-root user
-      run_as_user() {
-          local COMMAND="$*"
-          sudo -u "${USERNAME}" -H bash -c "${COMMAND}"
-      }
-
-      # Stderr helper
-      err() {
-          echo "(!) $*" >&2
-      }
-
-      # Architecture
-      architecture=$(uname -m)
-      if [[ "${architecture}" == "x86_64" ]]; then
-          architecture="amd64"
-      fi
-
-      # Version finder from git tags (for compose-switch)
-      find_version_from_git_tags() {
-          local variable_name=$1
-          local requested_version=${!variable_name}
-          if [[ "${requested_version}" == "none" ]]; then return; fi
-          local repository=$2
-          local prefix=${3:-"tags/v"}
-          local separator=${4:-"."}
-          local last_part_optional=${5:-"false"}
-          if [[ "$(echo "${requested_version}" | grep -o "." | wc -l)" != "2" ]]; then
-              local escaped_separator=${separator//./\\.}
-              local last_part
-              if [[ "${last_part_optional}" == "true" ]]; then
-                  last_part="(${escaped_separator}[0-9]+)?"
-              else
-                  last_part="${escaped_separator}[0-9]+"
-              fi
-              local regex="${prefix}\\K[0-9]+${escaped_separator}[0-9]+${last_part}$"
-              local version_list="$(git ls-remote --tags "${repository}" | grep -oP "${regex}" | tr -d ' ' | tr "${separator}" "." | sort -rV)"
-              if [[ "${requested_version}" == "latest" ]] || [[ "${requested_version}" == "current" ]] || [[ "${requested_version}" == "lts" ]]; then
-                  declare -g "${variable_name}"="$(echo "${version_list}" | head -n 1)"
-              else
-                  set +e
-                  declare -g "${variable_name}"="$(echo "${version_list}" | grep -E -m 1 "^${requested_version//./\\.}([\\.\\s]|$)")"
-                  set -e
-              fi
-          fi
-          if [[ -z "${!variable_name}" ]] || ! echo "${version_list}" | grep "^${!variable_name//./\\.}$" >/dev/null 2>&1; then
-              err "Invalid ${variable_name} value: ${requested_version}"
-              exit 1
-          fi
-          echo "${variable_name}=${!variable_name}"
-      }
-
-      echo "Starting Docker installation for user: $USERNAME"
-      echo "Azure DNS auto: $AZURE_DNS_AUTO_DETECTION"
-      echo "Default pool: $DOCKER_DEFAULT_ADDRESS_POOL"
-
-      # Install dependencies (non-interactive)
-      pacman -Syy --noconfirm
-      pacman -S --noconfirm --needed curl ca-certificates pigz iptables gnupg wget jq git docker docker-compose docker-buildx which
-
-      # Docker Compose v2 handling
-      docker_compose_path="/usr/bin/docker-compose"
-      if [[ "${DOCKER_DASH_COMPOSE_VERSION}" != "none" ]]; then
-          chmod +x "${docker_compose_path}"
-      fi
-
-      # Install compose-switch (v1 compat -> v2)
-      if [[ "${INSTALL_DOCKER_COMPOSE_SWITCH}" == "true" ]] && ! command -v compose-switch >/dev/null 2>&1; then
-          if command -v docker-compose >/dev/null 2>&1; then
-              echo "Installing compose-switch..."
-              current_compose_path="$(which docker-compose)"
-              compose_version=$(docker-compose --version | awk '{print $4}')
-              target_compose_path="$(dirname "${current_compose_path}")/docker-compose-v${compose_version}"
-              compose_switch_version="latest"
-              find_version_from_git_tags compose_switch_version "https://github.com/docker/compose-switch"
-              curl -fsSL "https://github.com/docker/compose-switch/releases/download/v${compose_switch_version}/docker-compose-linux-${architecture}" -o /usr/local/bin/compose-switch
-              chmod +x /usr/local/bin/compose-switch
-              mv "${current_compose_path}" "${target_compose_path}"
-              ln -sf "${target_compose_path}" "${docker_compose_path}"
-              echo "Compose-switch installed!"
-          else
-              err "Skipping compose-switch: docker-compose unavailable."
-          fi
-      fi
-
-      # Skip if docker-run.sh exists (idempotent)
-      if [[ -f "/usr/local/share/docker-run.sh" ]]; then
-          echo "/usr/local/share/docker-run.sh already exists."
-      else
-          echo "Creating /usr/local/share/docker-run.sh from template..."
-          cp /usr/local/share/docker-run.template /usr/local/share/docker-run.sh
-          sed -i "s|%%AZURE_ENABLED%%|${AZURE_DNS_AUTO_DETECTION}|g" /usr/local/share/docker-run.sh
-          sed -i "s|%%POOL_VALUE%%|${DOCKER_DEFAULT_ADDRESS_POOL}|g" /usr/local/share/docker-run.sh
-          chmod +x /usr/local/share/docker-run.sh
-      fi
-
-      # Docker group
-      if ! getent group docker >/dev/null; then
-          groupadd -r docker
-      fi
-      usermod -aG docker "${USERNAME}"
-
-      # Docker Buildx
-      if [[ "${INSTALL_DOCKER_BUILDX}" == "true" ]]; then
-          echo "Setting up docker-buildx..."
-          docker_home="/usr/lib/docker"
-          cli_plugins_dir="${docker_home}/cli-plugins"
-          mkdir -p "${cli_plugins_dir}"
-          buildx_path="${cli_plugins_dir}/docker-buildx"
-          chmod +x "${buildx_path}" 2>/dev/null || true
-          chown -R "${USERNAME}:docker" "${docker_home}"
-          chmod -R g+r+w "${docker_home}"
-          find "${docker_home}" -type d -print0 | xargs -0 chmod g+s 2>/dev/null || true
-      fi
-
-      # Shell completions
-      declare -A _completion_paths=(
-          ["${USER_HOME}/.zsh/completions/_docker"]="https://raw.githubusercontent.com/docker/cli/master/contrib/completion/zsh/_docker"
-          ["${USER_HOME}/.bash_completion.d/docker"]="https://raw.githubusercontent.com/docker/cli/master/contrib/completion/bash/docker"
-          ["${USER_HOME}/.config/fish/completions/docker.fish"]="https://raw.githubusercontent.com/docker/cli/master/contrib/completion/fish/docker.fish"
-      )
-      for _completion_path in "${!_completion_paths[@]}"; do
-          _completion_url="${_completion_paths[$_completion_path]}"
-          if [[ ! -f "${_completion_path}" ]]; then
-              echo "Installing Docker completion: ${_completion_path}"
-              run_as_user "mkdir -p \"\$(dirname '${_completion_path}')\" && curl -sSL -o '${_completion_path}' '${_completion_url}'"
-          fi
-      done
-      unset _completion_paths
-
-      echo "Docker installation completed!"
-      echo ""
-      echo "=== Installation Summary ==="
-      docker --version
-      command -v docker-compose >/dev/null && docker-compose --version || echo "docker-compose: not available"
-      command -v compose-switch >/dev/null && compose-switch --version || echo "compose-switch: not available"
-      command -v docker-buildx >/dev/null && docker-buildx version || echo "docker-buildx: not available"
-      getent group docker | grep -q "${USERNAME}" && echo "User ${USERNAME} in docker group" || echo "User ${USERNAME} NOT in docker group"
-      [[ -f /usr/local/share/docker-init.sh ]] && echo "docker-init.sh: Ready (calls docker-run.sh)"
-      [[ -f /usr/local/share/docker-run.sh ]] && echo "docker-run.sh: Configured (Azure: ${AZURE_DNS_AUTO_DETECTION}, Pool: ${DOCKER_DEFAULT_ADDRESS_POOL})"
-      echo "=========================="
-      echo "To start dind: exec /usr/local/share/docker-init.sh"
-    permissions: '0755'
+      
+      INSTALL_SH_URL="https://raw.githubusercontent.com/bartventer/arch-devcontainer-features/${REF}/src/docker-in-docker/install.sh"
+      TEMP_INSTALL_SH="/tmp/install-docker.sh"
+      
+      echo "Downloading Docker install script from ${INSTALL_SH_URL}..."
+      curl -fsSL "${INSTALL_SH_URL}" -o "${TEMP_INSTALL_SH}"
+      
+      echo "Making install script executable..."
+      chmod +x "${TEMP_INSTALL_SH}"
+      
+      echo "Running install script..."
+      "${TEMP_INSTALL_SH}" "$@"
+      
+      echo "Cleaning up temporary install script..."
+      rm -f "${TEMP_INSTALL_SH}"
+      
+      echo "Docker-in-Docker installation complete!"
 
 runcmd:
-  - /usr/local/bin/install-docker.sh vscode latest true true true ""
+  - |
+    VERSION=latest \
+    DOCKERDASHCOMPOSEVERSION=latest \
+    AZUREDNSAUTODETECTION=true \
+    DOCKERDEFAULTADDRESSPOOL="" \
+    INSTALLDOCKERBUILDX=true \
+    INSTALLDOCKERCOMPOSESWITCH=true \
+    USERNAME=archuser \
+    /usr/local/bin/docker-install-loader.sh main
+  - systemctl enable --now docker.service
+  - timeout 30 bash -c 'until docker info &>/dev/null; do sleep 1; done'
+  - echo "Docker is ready!"

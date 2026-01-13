@@ -117,7 +117,6 @@ write_files:
       [[ -n "$GLOBAL_CRATES" ]] && echo "Global crates: $GLOBAL_CRATES"
       echo "=========================="
     permissions: '0755'
-    owner: root:root
 
 runcmd:
   - pacman -S --noconfirm --needed base-devel rustup
