@@ -1,123 +1,78 @@
 #cloud-config
+
 write_files:
-  - path: /usr/local/bin/install-rust.sh
+  - path: /usr/local/bin/rust-install-loader.sh
+    permissions: '0755'
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-
-      USERNAME="$1"
-      RUST_VERSION="${2:-stable}"
-      ADDITIONAL_TARGETS="${3:-}"
-      GLOBAL_CRATES="${4:-}"
-      INSTALL_CLIPPY="${5:-true}"
-      INSTALL_RUSTFMT="${6:-true}"
-
-      USER_HOME=$(getent passwd "$USERNAME" | cut -d: -f6)
-      if [[ -z "$USER_HOME" ]]; then
-        echo "Error: User $USERNAME not found." >&2
+      
+      # Usage: $0 [master|feature_rust_1.0.1|...]
+      # Downloads and runs Rust install.sh from specified ref (default: master)
+      
+      REF="${1:-master}"
+      if [ "${REF}" != "master" ]; then
+          REF="refs/tags/${REF}"
+      else
+          REF="refs/heads/${REF}"
+      fi
+      
+      # GitHub repository details
+      REPO_OWNER="zyrakq"
+      REPO_NAME="arch-devcontainer-features"
+      SCRIPT_PATH="src/rust/install.sh"
+      
+      # Construct download URL
+      RUST_INSTALLER_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REF}/${SCRIPT_PATH}"
+      INSTALL_SCRIPT="/tmp/install-rust-$$.sh"
+      
+      echo "=== Rust Installation Loader ==="
+      echo "Repository: ${REPO_OWNER}/${REPO_NAME}"
+      echo "Reference: ${REF}"
+      echo "Downloading from: ${RUST_INSTALLER_URL}"
+      echo ""
+      
+      # Download installer script
+      if ! curl -fsSL -o "${INSTALL_SCRIPT}" "${RUST_INSTALLER_URL}"; then
+        echo "ERROR: Failed to download Rust installer" >&2
         exit 1
       fi
-
-      RUSTUP_HOME="$USER_HOME/.rustup"
-      CARGO_HOME="$USER_HOME/.cargo"
-
-      # Function to run commands as non-root user (matching original)
-      run_as_user() {
-          local COMMAND="$*"
-          if [[ "${USERNAME}" != "root" ]]; then
-              sudo -u "${USERNAME}" -H bash -c "${COMMAND}"
-          else
-              bash -c "${COMMAND}"
-          fi
-      }
-
-      echo "Starting Rust installation for $USERNAME (version: $RUST_VERSION)"
-
-      # Create dirs and set permissions
-      mkdir -p "$RUSTUP_HOME" "$CARGO_HOME"
-      chown -R "$USERNAME:$USERNAME" "$USER_HOME"
-      chmod -R 755 "$USER_HOME"
-
-      export RUSTUP_HOME CARGO_HOME
-      echo "Rust directories:"
-      echo "  RUSTUP_HOME: $RUSTUP_HOME"
-      echo "  CARGO_HOME: $CARGO_HOME"
-
-      # Initialize rustup
-      echo "Initializing rustup..."
-      run_as_user "export RUSTUP_HOME='$RUSTUP_HOME' CARGO_HOME='$CARGO_HOME' && rustup default '$RUST_VERSION'"
-      echo "Rust $RUST_VERSION toolchain installed!"
-
-      # Install components
-      if [[ "$INSTALL_CLIPPY" == "true" ]]; then
-        echo "Installing clippy..."
-        run_as_user "export RUSTUP_HOME='$RUSTUP_HOME' CARGO_HOME='$CARGO_HOME' && rustup component add clippy"
-        echo "Clippy installed!"
+      
+      # Verify downloaded file is not empty
+      if [ ! -s "${INSTALL_SCRIPT}" ]; then
+        echo "ERROR: Downloaded file is empty" >&2
+        rm -f "${INSTALL_SCRIPT}"
+        exit 1
       fi
-
-      if [[ "$INSTALL_RUSTFMT" == "true" ]]; then
-        echo "Installing rustfmt..."
-        run_as_user "export RUSTUP_HOME='$RUSTUP_HOME' CARGO_HOME='$CARGO_HOME' && rustup component add rustfmt"
-        echo "Rustfmt installed!"
-      fi
-
-      # Additional targets
-      if [[ -n "$ADDITIONAL_TARGETS" ]]; then
-        echo "Installing additional targets: $ADDITIONAL_TARGETS"
-        TARGETS=$(echo "$ADDITIONAL_TARGETS" | tr ',' ' ')
-        for target in $TARGETS; do
-          echo "Installing target: $target"
-          run_as_user "export RUSTUP_HOME='$RUSTUP_HOME' CARGO_HOME='$CARGO_HOME' && rustup target add '$target'"
-        done
-        echo "Additional targets installed!"
-      fi
-
-      # Global crates
-      if [[ -n "$GLOBAL_CRATES" ]]; then
-        echo "Installing global crates: $GLOBAL_CRATES"
-        CRATES=$(echo "$GLOBAL_CRATES" | tr ',' ' ')
-        for crate in $CRATES; do
-          echo "Installing crate: $crate"
-          run_as_user "export CARGO_HOME='$CARGO_HOME' && cargo install '$crate'"
-        done
-        echo "Global crates installed!"
-      fi
-
-      # Setup shell profiles
-      if [[ "$USERNAME" != "root" ]]; then
-        for profile in "$USER_HOME/.bashrc" "$USER_HOME/.zshrc"; do
-          if [[ -f "$profile" ]] && ! grep -q "cargo/bin" "$profile" 2>/dev/null; then
-            {
-              echo ""
-              echo "# Rust and Cargo configuration"
-              echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\""
-              echo "export CARGO_HOME=\"\$HOME/.cargo\""
-              echo "export RUSTUP_HOME=\"\$HOME/.rustup\""
-            } | sudo -u "$USERNAME" -H tee -a "$profile" >/dev/null
-          fi
-        done
-        echo "Environment variables configured for $USERNAME"
-      fi
-
-      echo "Rust feature installation completed!"
-
-      # Installation summary (run as user with PATH)
+      
+      # Make script executable
+      chmod +x "${INSTALL_SCRIPT}"
+      
+      echo "Running Rust installer..."
+      echo "Configuration:"
+      echo "  RUSTVERSION=${RUSTVERSION:-not set}"
+      echo "  ADDITIONALTARGETS=${ADDITIONALTARGETS:-not set}"
+      echo "  INSTALLCLIPPY=${INSTALLCLIPPY:-not set}"
+      echo "  INSTALLRUSTFMT=${INSTALLRUSTFMT:-not set}"
+      echo "  GLOBALCRATES=${GLOBALCRATES:-not set}"
+      echo "  USERNAME=${USERNAME:-not set}"
       echo ""
-      echo "=== Installation Summary ==="
-      run_as_user "export PATH=\"\$HOME/.cargo/bin:\$PATH\" && rustc --version || echo 'rustc: not available'"
-      run_as_user "export PATH=\"\$HOME/.cargo/bin:\$PATH\" && cargo --version || echo 'cargo: not available'"
-      run_as_user "export PATH=\"\$HOME/.cargo/bin:\$PATH\" && rustup --version || echo 'rustup: not available'"
-      if [[ "$INSTALL_CLIPPY" == "true" ]]; then
-        run_as_user "export PATH=\"\$HOME/.cargo/bin:\$PATH\" && command -v cargo-clippy >/dev/null && echo 'Clippy: Available' || echo 'Clippy: not available'"
-      fi
-      if [[ "$INSTALL_RUSTFMT" == "true" ]]; then
-        run_as_user "export PATH=\"\$HOME/.cargo/bin:\$PATH\" && command -v rustfmt >/dev/null && echo 'Rustfmt: Available' || echo 'Rustfmt: not available'"
-      fi
-      [[ -n "$ADDITIONAL_TARGETS" ]] && echo "Additional targets: $ADDITIONAL_TARGETS"
-      [[ -n "$GLOBAL_CRATES" ]] && echo "Global crates: $GLOBAL_CRATES"
-      echo "=========================="
-    permissions: '0755'
+      
+      # Execute installer script
+      "${INSTALL_SCRIPT}"
+      
+      # Cleanup
+      rm -f "${INSTALL_SCRIPT}"
+      
+      echo ""
+      echo "✓ Rust installation completed successfully!"
 
 runcmd:
-  - pacman -S --noconfirm --needed base-devel rustup
-  - /usr/local/bin/install-rust.sh archuser stable "" "" true true
+  - |
+    RUSTVERSION=stable \
+    ADDITIONALTARGETS="" \
+    INSTALLCLIPPY=true \
+    INSTALLRUSTFMT=true \
+    GLOBALCRATES="" \
+    USERNAME=archuser \
+    /usr/local/bin/rust-install-loader.sh master
