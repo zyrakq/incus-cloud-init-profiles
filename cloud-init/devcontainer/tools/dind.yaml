@@ -30,16 +30,20 @@ write_files:
       
       echo "Docker-in-Docker installation complete!"
 
+      systemctl enable --now docker.service
+
+      timeout 30 bash -c 'until docker info &>/dev/null; do sleep 1; done'
+
+      echo "Docker is ready!"
+
 runcmd:
+  - export USERNAME=${USERNAME:-archuser}
   - |
-    VERSION=latest \
-    DOCKERDASHCOMPOSEVERSION=latest \
-    AZUREDNSAUTODETECTION=true \
-    DOCKERDEFAULTADDRESSPOOL="" \
-    INSTALLDOCKERBUILDX=true \
-    INSTALLDOCKERCOMPOSESWITCH=true \
-    USERNAME=archuser \
-    /usr/local/bin/docker-install-loader.sh main
-  - systemctl enable --now docker.service
-  - timeout 30 bash -c 'until docker info &>/dev/null; do sleep 1; done'
-  - echo "Docker is ready!"
+    VERSION=${DIND_VERSION:-latest} \
+    DOCKERDASHCOMPOSEVERSION=${DIND_DOCKER_DASH_COMPOSE_VERSION:-latest} \
+    AZUREDNSAUTODETECTION=${DIND_AZURE_DNS_AUTO_DETECTION:-true} \
+    DOCKERDEFAULTADDRESSPOOL=${DIND_DOCKER_DEFAULT_ADDRESS_POOL:-""} \
+    INSTALLDOCKERBUILDX=${DIND_INSTALL_DOCKER_BUILDX:-true} \
+    INSTALLDOCKERCOMPOSESWITCH=${DIND_INSTALL_DOCKER_COMPOSES_WITCH:-true} \
+    USERNAME=${USERNAME} \
+    /usr/local/bin/docker-install-loader.sh ${DIND_REF:-main}

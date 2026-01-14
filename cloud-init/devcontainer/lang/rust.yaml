@@ -68,11 +68,12 @@ write_files:
       echo "✓ Rust installation completed successfully!"
 
 runcmd:
+  - export USERNAME=${USERNAME:-archuser}
   - |
-    RUSTVERSION=stable \
-    ADDITIONALTARGETS="" \
-    INSTALLCLIPPY=true \
-    INSTALLRUSTFMT=true \
-    GLOBALCRATES="" \
-    USERNAME=archuser \
-    /usr/local/bin/rust-install-loader.sh master
+    RUSTVERSION=${RUST_VERSION:-stable} \
+    ADDITIONALTARGETS=${RUST_ADDITIONAL_TARGETS:-""} \
+    INSTALLCLIPPY=${RUST_INSTALL_CLIPPY:-true} \
+    INSTALLRUSTFMT=${RUST_INSTALL_RUSTFMT:-true} \
+    GLOBALCRATES=${RUST_GLOBAL_CRATES:-""} \
+    USERNAME=${USERNAME} \
+    /usr/local/bin/rust-install-loader.sh ${RUST_REF:-master}

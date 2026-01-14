@@ -53,10 +53,13 @@ write_files:
       fi
 
 runcmd:
-  - cp /tmp/shared.profile /root/.profile && chown root:root /root/.profile
-  - cp /tmp/shared.profile /home/archuser/.profile && chown archuser:archuser /home/archuser/.profile
-  - mkdir -p /home/archuser/.config/systemd/user && chown -R archuser:archuser /home/archuser/.config
-  - cp /tmp/shared.ssh-agent.service /home/archuser/.config/systemd/user/ssh-agent.service
-  - chown archuser:archuser /home/archuser/.config/systemd/user/ssh-agent.service
-  - runuser -l archuser -c 'bash /tmp/install-ssh-agent.sh'
+  - export USERNAME=${USERNAME:-archuser}
+  - chown ${USERNAME}:${USERNAME} /tmp/shared.profile /tmp/shared.ssh-agent.service /tmp/install-ssh-agent.sh
+  - |
+    runuser -l ${USERNAME} -c '
+      mkdir -p ~/.config/systemd/user &&
+      cp /tmp/shared.profile ~/.profile &&
+      mv /tmp/shared.ssh-agent.service ~/.config/systemd/user/ssh-agent.service &&
+      bash /tmp/install-ssh-agent.sh
+    '
   - rm /tmp/shared.profile /tmp/install-ssh-agent.sh

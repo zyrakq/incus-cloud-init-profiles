@@ -1,0 +1,68 @@
+#cloud-config
+# Cloud-init configuration for installing common-utils feature
+# This configuration downloads and executes the common-utils installation script
+# from bartventer/arch-devcontainer-features repository
+
+write_files:
+  - path: /usr/local/bin/common-utils-loader.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Common Utils Feature Loader
+      # Downloads and executes install.sh from bartventer/arch-devcontainer-features
+      # 
+      # Usage: $0 [main|v1.25.1|...]
+      # Downloads and runs Common Utils install.sh from specified ref (default: main)
+      
+      set -e
+      
+      REF="${1:-main}"
+      TEMP_DIR="/tmp/common-utils-setup"
+      EXTRACT_DIR="${TEMP_DIR}/extracted"
+      
+      # Determine download URL based on ref
+      if [ "${REF}" = "main" ]; then
+          ARCHIVE_URL="https://github.com/bartventer/arch-devcontainer-features/archive/refs/heads/main.tar.gz"
+          DIR_PREFIX="arch-devcontainer-features-main"
+      else
+          ARCHIVE_URL="https://github.com/bartventer/arch-devcontainer-features/archive/refs/tags/${REF}.tar.gz"
+          DIR_PREFIX="arch-devcontainer-features-${REF#v}"
+      fi
+      
+      # Create temporary directories
+      mkdir -p "${EXTRACT_DIR}"
+      
+      echo "Downloading common-utils from ${ARCHIVE_URL}..."
+      curl -fsSL "${ARCHIVE_URL}" | tar -xz -C "${EXTRACT_DIR}"
+      
+      INSTALL_DIR="${EXTRACT_DIR}/${DIR_PREFIX}/src/common-utils"
+      
+      if [ ! -d "${INSTALL_DIR}" ]; then
+          echo "Error: Installation directory not found at ${INSTALL_DIR}"
+          ls -la "${EXTRACT_DIR}"
+          exit 1
+      fi
+      
+      echo "Executing common-utils installer from ${INSTALL_DIR}..."
+      cd "${INSTALL_DIR}"
+      chmod +x install.sh main.sh
+      exec ./install.sh "$@"
+  - path: /tmp/shared.zprofile
+    permissions: '0644'
+    content: |
+      [[ -f ~/.profile ]] && . ~/.profile
+
+runcmd:
+  - export USERNAME=${USERNAME:-archuser}
+  - |
+    INSTALLZSH=${COMMON_UTILS_INSTALL_ZSH:-true} \
+    ADDITIONALPACKAGES=${COMMON_UTILS_ADDITIONAL_PACKAGES:-""} \
+    CONFIGUREZSHASDEFAULTSHELL=${COMMON_UTILS_CONFIGURE_ZSH_AS_DEFAULT_SHELL:-true} \
+    INSTALLOHMYZSH=${COMMON_UTILS_INSTALL_OHMYZSH:-true} \
+    INSTALLOHMYZSHCONFIG=${COMMON_UTILS_INSTALL_OHMYZSH_CONFIG:-true} \
+    UPGRADEPACKAGES=${COMMON_UTILS_UPGRADE_PACKAGES:-true} \
+    USERNAME=${USERNAME} \
+    /usr/local/bin/common-utils-loader.sh ${COMMON_UTILS_REF:-main}
+  - |
+    chown ${USERNAME}:${USERNAME} /tmp/shared.zprofile && \
+    runuser -l ${USERNAME} -c "mv /tmp/shared.zprofile ~/.zprofile"

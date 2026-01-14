@@ -3,8 +3,9 @@
 ```sh
 yq eval-all '. as $item ireduce ({}; . *+ $item)' \
     base.yaml \
-    utils/pacman-mirror.yaml \
-    utils/sshd.yaml
+    ../common/pacman-mirror.yaml \
+    ../common/sshd.yaml \
+    tools/common-utils.yaml
 ```
 
 ```sh
@@ -20,7 +21,7 @@ yq eval-all '. as $item ireduce ({}; . *+ $item)' \
 ## Profile
 
 ```sh
-VENDOR_DATA=$(yq eval-all '. as $item ireduce ({}; . *+ $item)' base.yaml utils/pacman-mirror.yaml utils/sshd.yaml utils/zsh.yaml)
+VENDOR_DATA=$(yq eval-all '. as $item ireduce ({}; . *+ $item)' base.yaml ../common/pacman-mirror.yaml ../common/sshd.yaml tools/common-utils.yaml)
 ```
 
 ```sh
@@ -50,7 +51,7 @@ incus launch images:archlinux/cloud devcontainer
 ## Instance
 
 ```sh
-VENDOR_DATA=$(yq eval-all '. as $item ireduce ({}; . *+ $item)' base.yaml utils/pacman-mirror.yaml)
+VENDOR_DATA=$(yq eval-all '. as $item ireduce ({}; . *+ $item)' base.yaml ../common/pacman-mirror.yaml ../common/sshd.yaml tools/common-utils.yaml)
 ```
 
 ```sh

@@ -128,6 +128,14 @@ write_files:
       echo "zsh-syntax-highlighting installation completed"
       echo "Don't forget to add 'zsh-syntax-highlighting' to your plugins in ~/.zshrc"
 
+# zshell config
+  - path: /tmp/config-ohmyzsh.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      chown $UID:$PID /tmp/shared.zprofile /tmp/shared.zshrc
+      cp /tmp/shared.zprofile ~/.zprofile && cp /tmp/shared.zshrc ~/.zshrc
+
 package_upgrade: true
 packages:
   - zsh
@@ -137,14 +145,10 @@ runcmd:
     users=(root archuser)
     for user in "${users[@]}"; do
       if [ "$user" = "root" ]; then
-        bash /tmp/install-ohmyzsh.sh
+        bash /tmp/install-ohmyzsh.sh && bash /tmp/config-ohmyzsh.sh
       else
-        runuser -l "$user" -c 'bash /tmp/install-ohmyzsh.sh' 
+        runuser -l "$user" -c 'bash /tmp/install-ohmyzsh.sh && bash /tmp/config-ohmyzsh.sh' 
       fi
       chsh -s "$(which zsh)" "$user"
     done
-  - cp /tmp/shared.zprofile /root/.zprofile && chown root:root /root/.zprofile
-  - cp /tmp/shared.zprofile /home/archuser/.zprofile && chown archuser:archuser /home/archuser/.zprofile
-  - cp /tmp/shared.zshrc /root/.zshrc && chown root:root /root/.zshrc
-  - cp /tmp/shared.zshrc /home/archuser/.zshrc && chown archuser:archuser /home/archuser/.zshrc
-  - rm /tmp/shared.z* /tmp/install-ohmyzsh.sh
+  - rm /tmp/shared.z* /tmp/*-ohmyzsh.sh
