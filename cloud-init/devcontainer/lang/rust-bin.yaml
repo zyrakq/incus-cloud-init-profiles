@@ -7,7 +7,7 @@ write_files:
       #!/usr/bin/env bash
       set -euo pipefail
       
-      # Usage: $0 [master|feature_rust_1.0.1|...]
+      # Usage: $0 [master|feature_rust_bin_1.0.0|...]
       # Downloads and runs Rust install.sh from specified ref (default: master)
       
       REF="${1:-master}"
@@ -20,7 +20,7 @@ write_files:
       # GitHub repository details
       REPO_OWNER="zyrakq"
       REPO_NAME="arch-devcontainer-features"
-      SCRIPT_PATH="src/rust/install.sh"
+      SCRIPT_PATH="src/rust-bin/install.sh"
       
       # Construct download URL
       RUST_INSTALLER_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REF}/${SCRIPT_PATH}"
@@ -71,6 +71,7 @@ runcmd:
   - export USERNAME=${USERNAME:-archuser}
   - |
     RUSTVERSION=${RUST_VERSION:-stable} \
+    RUSTUP_PROFILE="${RUSTUPPROFILE:-"default"}"
     ADDITIONALTARGETS=${RUST_ADDITIONAL_TARGETS:-""} \
     INSTALLCLIPPY=${RUST_INSTALL_CLIPPY:-true} \
     INSTALLRUSTFMT=${RUST_INSTALL_RUSTFMT:-true} \
