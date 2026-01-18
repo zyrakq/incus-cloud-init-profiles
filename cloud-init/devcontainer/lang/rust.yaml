@@ -7,7 +7,7 @@ write_files:
       #!/usr/bin/env bash
       set -euo pipefail
       
-      # Usage: $0 [master|feature_rust_bin_1.0.0|...]
+      # Usage: $0 [master|feature_rust_2.0.0|...]
       # Downloads and runs Rust install.sh from specified ref (default: master)
       
       REF="${1:-master}"
@@ -20,7 +20,7 @@ write_files:
       # GitHub repository details
       REPO_OWNER="zyrakq"
       REPO_NAME="arch-devcontainer-features"
-      SCRIPT_PATH="src/rust-bin/install.sh"
+      SCRIPT_PATH="src/rust/install.sh"
       
       # Construct download URL
       RUST_INSTALLER_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REF}/${SCRIPT_PATH}"
@@ -50,11 +50,8 @@ write_files:
       
       echo "Running Rust installer..."
       echo "Configuration:"
-      echo "  RUSTVERSION=${RUSTVERSION:-not set}"
-      echo "  RUSTUPPROFILE=${RUSTUPPROFILE:-not set}"
-      echo "  ADDITIONALTARGETS=${ADDITIONALTARGETS:-not set}"
-      echo "  INSTALLCLIPPY=${INSTALLCLIPPY:-not set}"
-      echo "  INSTALLRUSTFMT=${INSTALLRUSTFMT:-not set}"
+      echo "  INSTALLRUSTSRC=${INSTALLRUSTSRC:-not set}"
+      echo "  INSTALLRUSTANALYZER=${INSTALLRUSTANALYZER:-not set}"
       echo "  GLOBALCRATES=${GLOBALCRATES:-not set}"
       echo "  USERNAME=${USERNAME:-not set}"
       echo ""
@@ -71,11 +68,8 @@ write_files:
 runcmd:
   - export USERNAME=${USERNAME:-archuser}
   - |
-    RUSTVERSION=${RUST_BIN_RUST_VERSION:-stable} \
-    RUSTUPPROFILE="${RUST_BIN_RUSTUP_PROFILE:-"default"}"
-    ADDITIONALTARGETS=${RUST_BIN_ADDITIONAL_TARGETS:-""} \
-    INSTALLCLIPPY=${RUST_BIN_INSTALL_CLIPPY:-true} \
-    INSTALLRUSTFMT=${RUST_BIN_INSTALL_RUSTFMT:-true} \
-    GLOBALCRATES=${RUST_BIN_GLOBAL_CRATES:-""} \
+    INSTALLRUSTSRC=${RUST_INSTALL_RUST_SRC:-"true"}
+    INSTALLRUSTANALYZER=${RUST_INSTALL_RUST_ANALYZER:-"true"}
+    GLOBALCRATES=${RUST_GLOBAL_CRATES:-""} \
     USERNAME=${USERNAME} \
-    /usr/local/bin/rust-install-loader.sh ${RUST_BIN_REF:-master}
+    /usr/local/bin/rust-install-loader.sh ${RUST_REF:-master}
