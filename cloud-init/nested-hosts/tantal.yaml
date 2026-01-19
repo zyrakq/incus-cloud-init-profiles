@@ -9,7 +9,7 @@ users:
     groups: wheel
     shell: /bin/zsh
     ssh_authorized_keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGeXav7wv8PpEtMWBsR7rptvyQsbewLwHstRKVZwT+LC zyrakq@tantal
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMGr4Gmaz9+pF7lGS/0SFIah6vgukPbm7PcRF55G4VIp zyrakq@tantal
 hostname: tantal
 
 write_files:

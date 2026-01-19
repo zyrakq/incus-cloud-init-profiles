@@ -1,0 +1,77 @@
+#cloud-config
+# Cloud-init configuration for deploying dotfiles using Dotter
+# This configuration clones the dotfiles repository and executes dotter deploy
+# with default parameters: ./dotter deploy -yf -l .dotter/<hostname>.toml (dynamically from /etc/hostname)
+
+write_files:
+  - path: /usr/local/bin/dotfiles-loader.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Dotfiles Deployment Loader
+      # Clones dotfiles repository and deploys using Dotter
+      #
+      # Usage: $0 <dotter-local-file>
+      # Clones repository and runs ./dotter deploy -yf -l <local-file>
+
+      set -e
+
+      # Determine target directory
+      TARGET_DIR="${DOTFILES_TARGET_DIR:-${HOME}/.dotfiles}"
+      REPO_URL="${DOTFILES_REPO_URL:-https://github.com/zyrakq/dotfiles.git}"
+      REF="${DOTFILES_REF:-master}"
+
+      # Check if already deployed
+      if [ -d "${TARGET_DIR}" ]; then
+          echo "Dotfiles already cloned at ${TARGET_DIR}"
+          echo "Using existing local dotfiles..."
+      else
+          echo "Cloning dotfiles repository from ${REPO_URL} to ${TARGET_DIR}..."
+          git clone --depth 1 --branch "${REF}" "${REPO_URL}" "${TARGET_DIR}"
+      fi
+
+      # Change to dotfiles directory
+      cd "${TARGET_DIR}"
+
+      # Determine architecture for dotter binary
+      ARCH=$(uname -m)
+      DOTTER_BIN="./dotter"
+
+      # If arch-specific binary exists, use it
+      if [ "${ARCH}" = "aarch64" ] || [ "${ARCH}" = "arm64" ]; then
+          if [ -f "./dotter.arm" ]; then
+              DOTTER_BIN="./dotter.arm"
+              echo "Using ARM dotter binary: ${DOTTER_BIN}"
+          fi
+      elif [ -f "./dotter" ]; then
+          echo "Using standard dotter binary: ${DOTTER_BIN}"
+      else
+          echo "Error: No suitable dotter binary found in ${TARGET_DIR}"
+          ls -la "${TARGET_DIR}/dotter*"
+          exit 1
+      fi
+
+      # Verify dotter binary exists and is executable
+      if [ ! -x "${DOTTER_BIN}" ]; then
+          echo "Error: ${DOTTER_BIN} is not executable or does not exist"
+          ls -la "${TARGET_DIR}"
+          exit 1
+      fi
+
+      # Execute dotter deploy with provided local file or default
+      LOCAL_FILE="${1:-.dotter/tantal.toml}"
+      echo "Running: ${DOTTER_BIN} deploy -yf -l \"${LOCAL_FILE}\""
+      exec "${DOTTER_BIN}" deploy -yf -l "${LOCAL_FILE}"
+
+runcmd:
+  - export USERNAME=${USERNAME:-zyrakq}
+  - |
+    export HOSTNAME=$(cat /etc/hostname)
+    export DOTTER_LOCAL_FILE=".dotter/${HOSTNAME}.toml"
+    DOTFILES_TARGET_DIR=/home/${USERNAME}/.dotfiles \
+    DOTFILES_REPO_URL=${DOTFILES_REPO_URL:-https://github.com/zyrakq/dotfiles.git} \
+    DOTFILES_REF=${DOTFILES_REF:-master} \
+    USERNAME=${USERNAME} \
+    runuser -l ${USERNAME} -c '/usr/local/bin/dotfiles-loader.sh "${DOTTER_LOCAL_FILE}"' 2>&1
+  - |
+    chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.dotfiles
