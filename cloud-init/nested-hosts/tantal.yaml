@@ -1,0 +1,29 @@
+#cloud-config
+users:
+  - name: zyrakq
+    gecos: Zyrakq
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    primary_group: zyrakq
+    groups: [wheel, users, zyrakq]
+    homedir: /home/zyrakq
+    groups: wheel
+    shell: /bin/zsh
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGeXav7wv8PpEtMWBsR7rptvyQsbewLwHstRKVZwT+LC zyrakq@tantal
+hostname: tantal
+
+write_files:
+# welcome
+  - path: /etc/motd
+    content: |
+      Arch in Incus + Cloud-init + SSH ready!
+
+package_upgrade: true
+packages:
+  - base-devel
+  - git
+  - kitty-terminfo
+  - htop
+  - nano
+runcmd:
+  - timedatectl set-ntp true
